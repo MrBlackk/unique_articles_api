@@ -1,77 +1,80 @@
 package main
 
 import (
-	"database/sql"
+	"encoding/json"
 	"fmt"
-	_ "github.com/go-sql-driver/mysql"
 	"github.com/julienschmidt/httprouter"
 	"log"
 	"net/http"
 	"strconv"
 )
 
-var db *sql.DB
+type post struct {
+	Content string `json:"content"`
+}
+
+type article struct {
+	Id      int    `json:"id"`
+	Content string `json:"content"`
+}
+
+type articles struct {
+	Articles []article `json:"articles"`
+}
+
+var inMemDb = articles{[]article{
+	{1, "content1"},
+	{2, "content2"},
+}}
 
 func main() {
-	var err error
-	db, err = sql.Open("mysql", "root:pass@/dc?charset=utf8")
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer db.Close()
-
-	err = db.Ping()
-	if err != nil {
-		log.Fatal(err)
-	}
-
 	mux := httprouter.New()
-	mux.GET("/", defaultRemove)
 	mux.POST("/articles", saveArticle)
 	mux.GET("/articles", getArticles)
+	mux.GET("/articles/:id", getArticle)
 	log.Fatal(http.ListenAndServe(":8080", mux))
 }
 
-func getArticles(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
-	articles, err := db.Query(`SELECT id, content FROM articles;`)
+func getArticle(w http.ResponseWriter, _ *http.Request, ps httprouter.Params) {
+	idStr := ps.ByName("id")
+	id, err1 := strconv.Atoi(idStr)
+	if err1 != nil {
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+	bs, err := json.Marshal(inMemDb.Articles[id-1])
 	if err != nil {
-		log.Println(err)
+		fmt.Println("error: ", err)
 	}
-	defer articles.Close()
-
-	var s, id, content string
-
-	for articles.Next() {
-		err = articles.Scan(&id, &content)
-		if err != nil {
-			log.Println(err)
-		}
-		s += id + " - " + content + "\n"
-	}
-	fmt.Fprint(w, s)
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(bs)
 }
 
-func saveArticle(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
-	stmt, err := db.Prepare(`INSERT INTO articles(content) VALUES ("Some_content");`)
+func getArticles(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
+	bs, err := json.Marshal(inMemDb)
 	if err != nil {
-		log.Println(err)
+		fmt.Println("error: ", err)
 	}
-	defer stmt.Close()
-
-	r, err := stmt.Exec()
-	if err != nil {
-		log.Println(err)
-	}
-	insertId, err := r.LastInsertId()
-	if err != nil {
-		log.Println(err)
-	}
-
-	id := strconv.FormatInt(insertId, 10)
-
-	fmt.Fprint(w, "Inserted id: "+id)
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(bs)
 }
 
-func defaultRemove(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
-	fmt.Fprint(w, "Default page")
+func saveArticle(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	//check content type
+	var data post
+	err := json.NewDecoder(r.Body).Decode(&data)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	l := len(inMemDb.Articles)
+	a := article{l + 1, data.Content}
+	inMemDb.Articles = append(inMemDb.Articles, a)
+	bs, err := json.Marshal(a)
+	if err != nil {
+		fmt.Println("error: ", err)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(bs)
 }
