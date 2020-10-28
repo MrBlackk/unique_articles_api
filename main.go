@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 )
 
 type post struct {
@@ -28,6 +29,16 @@ var inMemDb = articles{[]article{
 }}
 
 func main() {
+	w1 := strings.Fields("hello world")
+	w2 := strings.Fields("world hello hello")
+
+	d := Distance(w1, w2)
+	fmt.Println("Distance ", d)
+	fmt.Println("Proc: ", 100.0-float64(d)/float64(Max(len(w1), len(w2)))*100.0)
+
+	config := GetConfig()
+	fmt.Println(config.ArticleSimilarity)
+
 	mux := httprouter.New()
 	mux.POST("/articles", saveArticle)
 	mux.GET("/articles", getArticles)
