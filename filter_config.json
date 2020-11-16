@@ -1,0 +1,13 @@
+{
+  "Commons": ["a", "an", "the", "to", "of", "and", "but", "very"],
+  "Transitions": ["however", "indeed", "further", "moreover", "alternatively", "particularly", "especially", "considering", "concerning", "regarding"],
+  "Synonyms": [
+    ["good", "superb", "outstanding", "exceptional"],
+    ["new", "latest", "recent"],
+    ["long", "extended", "endless"],
+    ["old", "ancient"],
+    ["different", "odd", "uncommon", "exotic", "striking"],
+    ["small", "miniature", "tiny", "compact"],
+    ["large", "enormous", "massive"]
+  ]
+}

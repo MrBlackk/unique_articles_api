@@ -2,12 +2,12 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
+	"github.com/golang/gddo/httputil/header"
 	"github.com/julienschmidt/httprouter"
+	"io"
 	"log"
 	"net/http"
 	"strconv"
-	"strings"
 )
 
 type post struct {
@@ -15,77 +15,147 @@ type post struct {
 }
 
 type article struct {
-	Id      int    `json:"id"`
-	Content string `json:"content"`
+	Id            int    `json:"id"`
+	Content       string `json:"content"`
+	DuplicatesIds []int  `json:"duplicate_article_ids"`
+	prepared      []string
 }
 
 type articles struct {
 	Articles []article `json:"articles"`
 }
 
-var inMemDb = articles{[]article{
-	{1, "content1"},
-	{2, "content2"},
-}}
-
 func main() {
-	w1 := strings.Fields("hello world")
-	w2 := strings.Fields("world hello hello")
-
-	d := Distance(w1, w2)
-	fmt.Println("Distance ", d)
-	fmt.Println("Proc: ", 100.0-float64(d)/float64(Max(len(w1), len(w2)))*100.0)
-
-	config := GetConfig()
-	fmt.Println(config.ArticleSimilarity)
-
-	mux := httprouter.New()
-	mux.POST("/articles", saveArticle)
-	mux.GET("/articles", getArticles)
-	mux.GET("/articles/:id", getArticle)
-	log.Fatal(http.ListenAndServe(":8080", mux))
+	router := httprouter.New()
+	router.POST("/articles", saveArticle)
+	router.GET("/articles", getArticles)
+	router.GET("/articles/:id", getArticleById)
+	err := http.ListenAndServe(":8080", router)
+	if err != nil {
+		log.Fatal(err)
+	}
 }
 
-func getArticle(w http.ResponseWriter, _ *http.Request, ps httprouter.Params) {
+func getArticleById(w http.ResponseWriter, _ *http.Request, ps httprouter.Params) {
 	idStr := ps.ByName("id")
-	id, err1 := strconv.Atoi(idStr)
-	if err1 != nil {
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
-	bs, err := json.Marshal(inMemDb.Articles[id-1])
+
+	txn := db.Txn(false)
+	defer txn.Abort()
+	raw, err := txn.First(ArticleTable, ArticleId, id)
+	if err != nil || raw == nil {
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+
+	bs, err := json.Marshal(raw.(*article))
 	if err != nil {
-		fmt.Println("error: ", err)
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(bs)
 }
 
 func getArticles(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
-	bs, err := json.Marshal(inMemDb)
+	txn := db.Txn(false)
+	defer txn.Abort()
+	it, err := txn.Get(ArticleTable, ArticleId)
 	if err != nil {
-		fmt.Println("error: ", err)
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+
+	arts := articles{[]article{}}
+	for obj := it.Next(); obj != nil; obj = it.Next() {
+		a := obj.(*article)
+		arts.Articles = append(arts.Articles, *a)
+	}
+
+	bs, err := json.Marshal(arts)
+	if err != nil {
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(bs)
 }
 
 func saveArticle(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	//check content type
+	if r.Header.Get("Content-Type") != "" {
+		value, _ := header.ParseValueAndParams(r.Header, "Content-Type")
+		if value != "application/json" {
+			http.Error(w, "Content-Type header is not application/json", http.StatusUnsupportedMediaType)
+			return
+		}
+	}
+
 	var data post
-	err := json.NewDecoder(r.Body).Decode(&data)
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	err := dec.Decode(&data)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	l := len(inMemDb.Articles)
-	a := article{l + 1, data.Content}
-	inMemDb.Articles = append(inMemDb.Articles, a)
+	err = dec.Decode(&struct{}{})
+	if err != io.EOF {
+		http.Error(w, "Request body must only contain a single JSON object", http.StatusBadRequest)
+		return
+	}
+
+	a := article{NextId(), data.Content, make([]int, 0), prepare(data.Content)}
+	ids, err := findDuplicatesIds(&a)
+	if err != nil {
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+	a.DuplicatesIds = ids
+
+	txn := db.Txn(true)
+	err = txn.Insert(ArticleTable, &a)
+	if err != nil {
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+	txn.Commit()
+
 	bs, err := json.Marshal(a)
 	if err != nil {
-		fmt.Println("error: ", err)
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(bs)
+}
+
+func findDuplicatesIds(a *article) ([]int, error) {
+	txn := db.Txn(false)
+	defer txn.Abort()
+	it, err := txn.Get(ArticleTable, ArticleId)
+	if err != nil {
+		return nil, err
+	}
+
+	r := make([]int, 0)
+	for obj := it.Next(); obj != nil; obj = it.Next() {
+		v := obj.(*article)
+		if isDuplicate(v.prepared, a.prepared) {
+			r = append(r, v.Id)
+			txn := db.Txn(true)
+			v.DuplicatesIds = append(v.DuplicatesIds, a.Id)
+			err = txn.Insert(ArticleTable, v)
+			if err != nil {
+				return nil, err
+			}
+			txn.Commit()
+		}
+	}
+
+	return r, nil
 }
