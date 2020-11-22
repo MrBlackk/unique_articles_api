@@ -19,11 +19,11 @@ var Conf Config
 var FilterConf FilterConfig
 
 func init() {
-	Conf = getConfig()
-	FilterConf = getFilterConfig()
+	Conf = readConfig()
+	FilterConf = readFilterConfig()
 }
 
-func getConfig() Config {
+func readConfig() Config {
 	config := Config{}
 	err := gonfig.GetConf("config.json", &config)
 	if err != nil {
@@ -32,7 +32,7 @@ func getConfig() Config {
 	return config
 }
 
-func getFilterConfig() FilterConfig {
+func readFilterConfig() FilterConfig {
 	config := FilterConfig{}
 	err := gonfig.GetConf("filter_config.json", &config)
 	if err != nil {

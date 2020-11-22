@@ -6,6 +6,7 @@ import (
 	"unicode"
 )
 
+// TODO: optimize to one-two loops and check order
 func prepare(str string) []string {
 	arr := strings.FieldsFunc(str, func(r rune) bool {
 		return !unicode.IsLetter(r)

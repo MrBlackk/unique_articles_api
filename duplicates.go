@@ -6,6 +6,9 @@ func isDuplicate(w1 []string, w2 []string) bool {
 	return p >= float64(Conf.ArticleSimilarity)
 }
 
+// Modified Levenshtein distance for measuring the difference between two articles.
+// Distance between two articles is the minimum number of single-word edits
+// (insertions, deletions or substitutions) required to change one article into the other
 func distance(s1 []string, s2 []string) int {
 	l1 := len(s1)
 	l2 := len(s2)
