@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"github.com/golang/gddo/httputil/header"
 	"github.com/julienschmidt/httprouter"
+	"github.com/pkg/errors"
 	"io"
 	"log"
 	"net/http"
@@ -52,13 +53,7 @@ func getArticleById(w http.ResponseWriter, _ *http.Request, ps httprouter.Params
 		return
 	}
 
-	bs, err := json.Marshal(raw.(*article))
-	if err != nil {
-		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.Write(bs)
+	writeJson(w, raw.(*article))
 }
 
 func getArticles(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
@@ -76,36 +71,12 @@ func getArticles(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
 		arts.Articles = append(arts.Articles, *a)
 	}
 
-	bs, err := json.Marshal(arts)
-	if err != nil {
-		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.Write(bs)
+	writeJson(w, arts)
 }
 
 func saveArticle(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	if r.Header.Get("Content-Type") != "" {
-		value, _ := header.ParseValueAndParams(r.Header, "Content-Type")
-		if value != "application/json" {
-			http.Error(w, "Content-Type header is not application/json", http.StatusUnsupportedMediaType)
-			return
-		}
-	}
-
-	var data post
-	dec := json.NewDecoder(r.Body)
-	dec.DisallowUnknownFields()
-	err := dec.Decode(&data)
+	data, err := decodeJson(w, r)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	err = dec.Decode(&struct{}{})
-	if err != io.EOF {
-		http.Error(w, "Request body must only contain a single JSON object", http.StatusBadRequest)
 		return
 	}
 
@@ -125,13 +96,46 @@ func saveArticle(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	}
 	txn.Commit()
 
-	bs, err := json.Marshal(a)
+	writeJson(w, a)
+}
+
+func decodeJson(w http.ResponseWriter, r *http.Request) (post, error) {
+	var data post
+	if r.Header.Get("Content-Type") != "" {
+		value, _ := header.ParseValueAndParams(r.Header, "Content-Type")
+		if value != "application/json" {
+			http.Error(w, "Content-Type header is not application/json", http.StatusUnsupportedMediaType)
+			return data, errors.New("")
+		}
+	}
+
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	err := dec.Decode(&data)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return data, err
+	}
+
+	err = dec.Decode(&struct{}{})
+	if err != io.EOF {
+		http.Error(w, "Request body must only contain a single JSON object", http.StatusBadRequest)
+		return data, err
+	}
+	return data, nil
+}
+
+func writeJson(w http.ResponseWriter, v interface{}) {
+	bs, err := json.Marshal(v)
 	if err != nil {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	w.Write(bs)
+	_, err = w.Write(bs)
+	if err != nil {
+		log.Printf("Write failed: %v", err)
+	}
 }
 
 func findDuplicatesIds(a *article) ([]int, error) {
