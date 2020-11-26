@@ -105,7 +105,7 @@ func decodeJson(w http.ResponseWriter, r *http.Request) (post, error) {
 		value, _ := header.ParseValueAndParams(r.Header, "Content-Type")
 		if value != "application/json" {
 			http.Error(w, "Content-Type header is not application/json", http.StatusUnsupportedMediaType)
-			return data, errors.New("")
+			return data, errors.New("Content-Type header is not application/json")
 		}
 	}
 
