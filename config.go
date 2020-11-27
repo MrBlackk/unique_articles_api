@@ -6,7 +6,7 @@ import (
 )
 
 type Config struct {
-	ArticleSimilarity int
+	ArticleSimilarity float64
 }
 
 type FilterConfig struct {

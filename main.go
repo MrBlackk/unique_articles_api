@@ -149,7 +149,7 @@ func findDuplicatesIds(a *article) ([]int, error) {
 	r := make([]int, 0)
 	for obj := it.Next(); obj != nil; obj = it.Next() {
 		v := obj.(*article)
-		if isDuplicate(v.prepared, a.prepared) {
+		if isDuplicateArticles(v.prepared, a.prepared) {
 			r = append(r, v.Id)
 			txn := db.Txn(true)
 			v.DuplicatesIds = append(v.DuplicatesIds, a.Id)
