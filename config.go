@@ -25,7 +25,7 @@ func init() {
 
 func readConfig() Config {
 	config := Config{}
-	err := gonfig.GetConf("config.json", &config)
+	err := gonfig.GetConf("configs/config.json", &config)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -34,7 +34,7 @@ func readConfig() Config {
 
 func readFilterConfig() FilterConfig {
 	config := FilterConfig{}
-	err := gonfig.GetConf("filter_config.json", &config)
+	err := gonfig.GetConf("configs/filter_config.json", &config)
 	if err != nil {
 		log.Fatal(err)
 	}
