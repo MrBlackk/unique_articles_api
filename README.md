@@ -1,14 +1,17 @@
-Запуск сервісу на localhost:8080:
-docker-compose up
+##Unique articles API
+Simple service to store articles and check for duplicates.
 
-API:
-POST /articles, який приймає json {"content": "..."}
-та повертає {"id": 5, "content": "...", "duplicate_article_ids": [1, 3]}
+#####To start service on localhost:8080 run:
+`docker-compose up`
 
-GET /articles/:id, який повертає статтю якщо існує
-{"id": 3, "content": "...", "duplicate_article_ids": [1, 5]}
+###API:
+To add article `POST /articles` with json `{"content": "..."}`, which returns `{"id": 5, "content": "...", "duplicate_article_ids": [1, 3]}`
 
-GET /articles, який повертає усі статті
+To get article by id `GET /articles/:id`, which returns article if exists
+`{"id": 3, "content": "...", "duplicate_article_ids": [1, 5]}`
+
+`GET /articles` returns all saved articles
+```
 {"articles": [
   {"id": 1, "content": "...", "duplicate_article_ids": [3, 5]},
   {"id": 2, "content": "...", "duplicate_article_ids": []},
@@ -16,15 +19,20 @@ GET /articles, який повертає усі статті
   {"id": 4, "content": "...", "duplicate_article_ids": []},
   {"id": 5, "content": "...", "duplicate_article_ids": [1, 3]}
 ]}
+```
 
-Методологія:
-Перед тим як порівнювати тексти відкидаю часті слова (напр. "a", "an"), слова які легко замінювати (напр. "however", "indeed"),
-також проводжу нормалізацію слова до однієї форми (напр. прибрати множину), синоніми приводжу до одного базового слова. Конфігуруються в filter_config.json файлі
-Вважаю що порядок слів все ж є важливим.
-За основу взяв модифікований алгоритм для пошуку відстані Левенштейна, з базою не буква а слово.
-Відсоток дублікату конфігурується в config.json файлі
+####Duplicates methodology:
+#####Articles are filtered before comparison:
+- removed punctuation, frequent words, transitional expressions
+- words stemming (process of reducing inflected (or sometimes derived) words to their word stem, base or root form)
+- convert synonyms to base form
 
-Речі на які б хотів звернути увагу:
-БД: використовується in memory, але чисто в умовах завдання що запускаємо в докері однією командою, взагалі бажано б було використовувати звичайну
-При знаходженні дублікатів записується дублікат до всіх записів які є дублікатами - не оптимально, не було часу вирішити проблему
-Є шанс що при одночасних запитах можуть вичитатися застарілі статті
+#####Articles comparison:
+Modified Levenshtein distance for measuring the difference between two articles.
+Distance between two articles is the minimum number of single-word edits (insertions, deletions or substitutions) required to change one article into the other
+
+Default duplicate level: **95%**, could be changed in `configs/config.json`
+
+####Database
+In db stored two versions of article - content and filtered content.
+Used in-memory database for simplicity.
